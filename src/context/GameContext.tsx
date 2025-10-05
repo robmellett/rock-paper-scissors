@@ -9,15 +9,15 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
 
   const addResult = (result: GameResult) => {
     // Add to history
-    setHistory(prev => [result, ...prev]);
-    
+    setHistory((prev) => [result, ...prev]);
+
     // Update score
     if (result.result === "win") {
-      setScore(prev => ({ ...prev, wins: prev.wins + 1 }));
+      setScore((prev) => ({ ...prev, wins: prev.wins + 1 }));
     } else if (result.result === "lose") {
-      setScore(prev => ({ ...prev, losses: prev.losses + 1 }));
+      setScore((prev) => ({ ...prev, losses: prev.losses + 1 }));
     } else if (result.result === "tie") {
-      setScore(prev => ({ ...prev, ties: prev.ties + 1 }));
+      setScore((prev) => ({ ...prev, ties: prev.ties + 1 }));
     }
   };
 
