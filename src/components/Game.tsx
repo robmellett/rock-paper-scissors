@@ -6,6 +6,7 @@ import {
   getComputerGesture,
 } from "../utils/gestureRecognition";
 import { useGame } from "../context/GameContext";
+import { detectHandGesture, loadHandposeModel } from "../utils/handGestureRecognition";
 
 const Game = () => {
   const { score, addResult } = useGame();
@@ -17,9 +18,35 @@ const Game = () => {
   const [computerGesture, setComputerGesture] = useState<Gesture>(null);
   const [result, setResult] = useState<"win" | "lose" | "tie" | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [isModelLoading, setIsModelLoading] = useState(true);
 
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const webcamRef = useRef<Webcam>(null);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load the handpose model when component mounts
+  useEffect(() => {
+    const loadModel = async () => {
+      try {
+        await loadHandposeModel();
+        setIsModelLoading(false);
+      } catch (error) {
+        console.error("Error loading handpose model:", error);
+        setIsModelLoading(false);
+      }
+    };
+
+    loadModel();
+
+    return () => {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
+      if (countdownRef.current) {
+        clearTimeout(countdownRef.current);
+      }
+    };
+  }, []);
 
   const startGame = () => {
     setGameState("countdown");
@@ -30,51 +57,61 @@ const Game = () => {
     setCapturedImage(null);
   };
 
+  // Effect for hand gesture detection during countdown
   useEffect(() => {
-    if (gameState === "countdown" && countdown > 0) {
+    if (gameState === "countdown" && countdown > 0 && !isModelLoading) {
       countdownRef.current = setTimeout(() => {
         setCountdown(countdown - 1);
       }, 1000);
-    } else if (gameState === "countdown" && countdown === 0) {
-      // Capture image and determine gestures
-      if (webcamRef.current) {
-        const imageSrc = webcamRef.current.getScreenshot();
-        setCapturedImage(imageSrc || null);
-
-        // In a real implementation, we would analyze the image to determine the gesture
-        // For now, we'll just randomly select one
-        const playerGesture =
-          Math.random() > 0.5
-            ? Math.random() > 0.5
-              ? "rock"
-              : "paper"
-            : "scissors";
-        setPlayerGesture(playerGesture);
-
-        const computerGesture = getComputerGesture();
-        setComputerGesture(computerGesture);
-
-        const gameResult = determineWinner(playerGesture, computerGesture);
-        setResult(gameResult);
-
-        // Save game result to history
-        addResult({
-          playerGesture,
-          computerGesture,
-          result: gameResult,
-          timestamp: new Date(),
-        });
-
-        setGameState("result");
+    } else if (gameState === "countdown" && countdown === 0 && !isModelLoading) {
+      // Start detecting hand gestures
+      if (webcamRef.current?.video) {
+        const detectGesture = async () => {
+          const gesture = await detectHandGesture(webcamRef.current!.video!);
+          if (gesture) {
+            setPlayerGesture(gesture);
+            // Capture image when gesture is detected
+            const imageSrc = webcamRef.current!.getScreenshot();
+            setCapturedImage(imageSrc || null);
+            
+            // Get computer gesture and determine winner
+            const computerGesture = getComputerGesture();
+            setComputerGesture(computerGesture);
+            
+            const gameResult = determineWinner(gesture, computerGesture);
+            setResult(gameResult);
+            
+            // Save game result to history
+            addResult({
+              playerGesture: gesture,
+              computerGesture,
+              result: gameResult,
+              timestamp: new Date(),
+            });
+            
+            setGameState("result");
+            
+            // Clear detection interval
+            if (detectionIntervalRef.current) {
+              clearInterval(detectionIntervalRef.current);
+            }
+          }
+        };
+        
+        // Run detection every 200ms
+        detectionIntervalRef.current = setInterval(detectGesture, 200);
+        
+        // Also run immediately
+        detectGesture();
       }
     }
-
+    
     return () => {
       if (countdownRef.current) {
         clearTimeout(countdownRef.current);
       }
     };
-  }, [gameState, countdown, addResult]);
+  }, [gameState, countdown, isModelLoading, addResult]);
 
   const resetGame = () => {
     setGameState("idle");
@@ -83,6 +120,11 @@ const Game = () => {
     setComputerGesture(null);
     setResult(null);
     setCapturedImage(null);
+    
+    // Clear any existing intervals
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+    }
   };
 
   const getGestureEmoji = (gesture: Gesture) => {
@@ -127,6 +169,15 @@ const Game = () => {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-6xl font-bold text-white bg-black bg-opacity-50 rounded-full w-24 h-24 flex items-center justify-center">
                   {countdown}
+                </div>
+              </div>
+            )}
+            
+            {isModelLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                <div className="text-white text-center">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mb-2"></div>
+                  <p>Loading AI model...</p>
                 </div>
               </div>
             )}
@@ -241,9 +292,14 @@ const Game = () => {
               {gameState === "idle" ? (
                 <button
                   onClick={startGame}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-black font-bold py-3 px-4 rounded-lg transition duration-200 ease-in-out transform hover:scale-105"
+                  disabled={isModelLoading}
+                  className={`flex-1 font-bold py-3 px-4 rounded-lg transition duration-200 ease-in-out transform hover:scale-105 ${
+                    isModelLoading 
+                      ? "bg-gray-400 text-white cursor-not-allowed" 
+                      : "bg-indigo-600 hover:bg-indigo-700 text-black"
+                  }`}
                 >
-                  Play Game
+                  {isModelLoading ? "Loading..." : "Play Game"}
                 </button>
               ) : gameState === "countdown" ? (
                 <button
