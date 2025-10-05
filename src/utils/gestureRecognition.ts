@@ -9,7 +9,7 @@ const gestureLabels: Record<number, Gesture> = {
   2: 'scissors',
 };
 
-export const recognizeGesture = (_imageData: ImageData): Gesture => {
+export const recognizeGesture = (): Gesture => {
   // This is a mock implementation that randomly selects a gesture
   // A real implementation would analyze the imageData to detect hand gestures
   const gestureKeys = Object.keys(gestureLabels).map(Number);

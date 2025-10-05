@@ -1,44 +1,84 @@
-import * as tf from '@tensorflow/tfjs';
-import * as handpose from '@tensorflow-models/handpose';
+import { Hands, Results } from '@mediapipe/hands';
 import type { Gesture } from '../types';
 
-let model: handpose.HandPose | null = null;
+let hands: Hands | null = null;
+let isModelLoading = false;
+let isModelLoaded = false;
 
-// Load the handpose model
+// Load the MediaPipe Hands model
 export const loadHandposeModel = async () => {
-  if (!model) {
-    await tf.ready();
-    model = await handpose.load();
+  if (isModelLoaded) {
+    return;
   }
-  return model;
+  
+  if (isModelLoading) {
+    // Wait for the model to finish loading
+    while (isModelLoading) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return;
+  }
+  
+  isModelLoading = true;
+  
+  try {
+    hands = new Hands({
+      locateFile: (file) => {
+        // Use npm-installed package instead of jsDelivr CDN
+        return `../node_modules/@mediapipe/hands/${file}`;
+      }
+    });
+    
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    
+    // We don't need to set up onResults here since we'll handle results in detectHandGesture
+    isModelLoaded = true;
+  } catch (error) {
+    console.error('Error loading MediaPipe Hands model:', error);
+    throw error;
+  } finally {
+    isModelLoading = false;
+  }
+  
+  return hands;
 };
 
 // Function to determine gesture based on finger positions
-export const recognizeHandGesture = (landmarks: number[][]) => {
+export const recognizeHandGesture = (results: Results): Gesture => {
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    return null;
+  }
+  
+  // Get landmarks for the first detected hand
+  const landmarks = results.multiHandLandmarks[0];
+  
   // Extract key points
-  const thumbTip = landmarks[4];
   const indexTip = landmarks[8];
   const middleTip = landmarks[12];
   const ringTip = landmarks[16];
   const pinkyTip = landmarks[20];
   
-  const thumbBase = landmarks[2];
   const indexBase = landmarks[5];
   const middleBase = landmarks[9];
   const ringBase = landmarks[13];
   const pinkyBase = landmarks[17];
+  const wrist = landmarks[0];
   
   // Calculate distances between tips and base
-  const thumbExtended = getDistance(thumbTip, thumbBase) > getDistance(landmarks[3], thumbBase) * 1.2;
-  const indexExtended = getDistance(indexTip, indexBase) > getDistance(landmarks[7], indexBase) * 1.2;
-  const middleExtended = getDistance(middleTip, middleBase) > getDistance(landmarks[11], middleBase) * 1.2;
-  const ringExtended = getDistance(ringTip, ringBase) > getDistance(landmarks[15], ringBase) * 1.2;
-  const pinkyExtended = getDistance(pinkyTip, pinkyBase) > getDistance(landmarks[19], pinkyBase) * 1.2;
+  const indexExtended = getDistance(indexTip, wrist) > getDistance(indexBase, wrist);
+  const middleExtended = getDistance(middleTip, wrist) > getDistance(middleBase, wrist);
+  const ringExtended = getDistance(ringTip, wrist) > getDistance(ringBase, wrist);
+  const pinkyExtended = getDistance(pinkyTip, wrist) > getDistance(pinkyBase, wrist);
   
   // Determine gesture based on which fingers are extended
   if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) {
     return 'scissors';
-  } else if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended && thumbExtended) {
+  } else if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
     return 'rock';
   } else if (indexExtended && middleExtended && ringExtended && pinkyExtended) {
     return 'paper';
@@ -48,28 +88,37 @@ export const recognizeHandGesture = (landmarks: number[][]) => {
 };
 
 // Helper function to calculate distance between two points
-const getDistance = (point1: number[], point2: number[]) => {
-  return Math.sqrt(Math.pow(point1[0] - point2[0], 2) + Math.pow(point1[1] - point2[1], 2));
+const getDistance = (point1: { x: number, y: number }, point2: { x: number, y: number }) => {
+  return Math.sqrt(Math.pow(point1.x - point2.x, 2) + Math.pow(point1.y - point2.y, 2));
 };
 
 // Function to detect hand gestures from video
 export const detectHandGesture = async (video: HTMLVideoElement): Promise<Gesture> => {
-  if (!model) {
+  if (!isModelLoaded) {
     await loadHandposeModel();
   }
   
-  if (!model) {
-    throw new Error('Handpose model not loaded');
+  if (!hands) {
+    throw new Error('MediaPipe Hands model not loaded');
   }
   
-  // Detect hands in the video
-  const predictions = await model.estimateHands(video, true);
-  
-  if (predictions.length > 0) {
-    // Use the first detected hand
-    const landmarks = predictions[0].landmarks;
-    return recognizeHandGesture(landmarks);
-  }
-  
-  return null;
+  return new Promise((resolve) => {
+    // Set up a temporary listener for results
+    const onResultsCallback = (results: Results) => {
+      const gesture = recognizeHandGesture(results);
+      resolve(gesture);
+      
+      // Remove the temporary listener
+      hands!.onResults(() => {});
+    };
+    
+    // Set the temporary listener
+    hands.onResults(onResultsCallback);
+    
+    // Process the current video frame
+    hands.send({ image: video }).catch((error) => {
+      console.error('Error processing video frame:', error);
+      resolve(null);
+    });
+  });
 };
