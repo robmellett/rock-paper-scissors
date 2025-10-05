@@ -1,39 +1,7 @@
-import { useState } from 'react';
-
-// Mock data for history
-const mockHistory = [
-  {
-    id: 1,
-    playerGesture: 'rock',
-    computerGesture: 'scissors',
-    result: 'win',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5)
-  },
-  {
-    id: 2,
-    playerGesture: 'paper',
-    computerGesture: 'rock',
-    result: 'win',
-    timestamp: new Date(Date.now() - 1000 * 60 * 15)
-  },
-  {
-    id: 3,
-    playerGesture: 'scissors',
-    computerGesture: 'rock',
-    result: 'lose',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30)
-  },
-  {
-    id: 4,
-    playerGesture: 'rock',
-    computerGesture: 'rock',
-    result: 'tie',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60)
-  },
-];
+import { useGame } from '../context/GameContext';
 
 const History = () => {
-  const [history] = useState(mockHistory);
+  const { history } = useGame();
   
   const getGestureEmoji = (gesture: string) => {
     switch (gesture) {
@@ -67,14 +35,14 @@ const History = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {history.map((game) => (
+          {history.map((game, index) => (
             <div 
-              key={game.id} 
+              key={index} 
               className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center space-x-4">
                 <div className="text-3xl">
-                  {getGestureEmoji(game.playerGesture)}
+                  {getGestureEmoji(game.playerGesture || '')}
                 </div>
                 <div className="text-lg font-semibold text-gray-700">You</div>
               </div>
@@ -84,12 +52,12 @@ const History = () => {
               <div className="flex items-center space-x-4">
                 <div className="text-lg font-semibold text-gray-700">Computer</div>
                 <div className="text-3xl">
-                  {getGestureEmoji(game.computerGesture)}
+                  {getGestureEmoji(game.computerGesture || '')}
                 </div>
               </div>
               
-              <div className={`px-3 py-1 rounded-full text-sm font-medium ${getResultColor(game.result)}`}>
-                {game.result.charAt(0).toUpperCase() + game.result.slice(1)}
+              <div className={`px-3 py-1 rounded-full text-sm font-medium ${getResultColor(game.result || 'tie')}`}>
+                {game.result ? game.result.charAt(0).toUpperCase() + game.result.slice(1) : 'Unknown'}
               </div>
               
               <div className="text-gray-500 text-sm">
@@ -97,17 +65,6 @@ const History = () => {
               </div>
             </div>
           ))}
-        </div>
-      )}
-      
-      {history.length > 0 && (
-        <div className="mt-6 text-center">
-          <button 
-            className="text-indigo-600 hover:text-indigo-800 font-medium"
-            onClick={() => alert('In a full implementation, this would clear your history')}
-          >
-            Clear History
-          </button>
         </div>
       )}
     </div>
