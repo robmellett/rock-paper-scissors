@@ -5,8 +5,10 @@ import {
   determineWinner,
   getComputerGesture,
 } from "../utils/gestureRecognition";
+import { useGame } from "../context/GameContext";
 
 const Game = () => {
+  const { score, addResult } = useGame();
   const [gameState, setGameState] = useState<
     "idle" | "countdown" | "playing" | "result"
   >("idle");
@@ -14,7 +16,6 @@ const Game = () => {
   const [playerGesture, setPlayerGesture] = useState<Gesture>(null);
   const [computerGesture, setComputerGesture] = useState<Gesture>(null);
   const [result, setResult] = useState<"win" | "lose" | "tie" | null>(null);
-  const [score, setScore] = useState({ wins: 0, losses: 0, ties: 0 });
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,14 +57,13 @@ const Game = () => {
         const gameResult = determineWinner(playerGesture, computerGesture);
         setResult(gameResult);
 
-        // Update score
-        if (gameResult === "win") {
-          setScore((prev) => ({ ...prev, wins: prev.wins + 1 }));
-        } else if (gameResult === "lose") {
-          setScore((prev) => ({ ...prev, losses: prev.losses + 1 }));
-        } else if (gameResult === "tie") {
-          setScore((prev) => ({ ...prev, ties: prev.ties + 1 }));
-        }
+        // Save game result to history
+        addResult({
+          playerGesture,
+          computerGesture,
+          result: gameResult,
+          timestamp: new Date(),
+        });
 
         setGameState("result");
       }
@@ -74,7 +74,7 @@ const Game = () => {
         clearTimeout(countdownRef.current);
       }
     };
-  }, [gameState, countdown]);
+  }, [gameState, countdown, addResult]);
 
   const resetGame = () => {
     setGameState("idle");
