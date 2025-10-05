@@ -1,5 +1,11 @@
 # Rock Paper Scissors Game
 
+A vibe coded app using [Goose](https://block.github.io/goose/) and the [Qwen 3](qwen/qwen3-coder) model. 
+
+You can find the original prompt [here](prompt.md), and you can find the tailored [.goosehints](.goosehints) to assit the model.
+
+---
+
 A modern web-based Rock Paper Scissors game built with React 19, TypeScript, and Tailwind CSS featuring webcam gesture recognition.
 
 ## Features
